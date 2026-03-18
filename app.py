@@ -4,12 +4,13 @@ import matplotlib.pyplot as plt
 import plotly.express as px
 from PIL import Image
 import io
+import os
 import matplotlib.patches as mpatches
 
 # ----------------------------
 # CONFIG
 # ----------------------------
-st.set_page_config(page_title="Road Dashboard", layout="wide")
+st.set_page_config(page_title="ENI NSV Dashboard", layout="wide")
 
 # ----------------------------
 # LOAD DATA
@@ -35,24 +36,29 @@ lanes = list(data.keys())
 df_base = data["LHS_Fast"]
 
 # ----------------------------
-# LOGO
+# LOGO SAFE LOAD
 # ----------------------------
-logo = Image.open("logo.png")
-c1, c2 = st.columns([1,5])
-c1.image(logo, width=180)
-c2.markdown("<h1>Road Maintenance Dashboard</h1>", unsafe_allow_html=True)
+col1, col2 = st.columns([1,5])
+
+if os.path.exists("logo.png"):
+    logo = Image.open("logo.png")
+    col1.image(logo, width=180)
+else:
+    col1.write("ENI")
+
+col2.markdown("<h1>Road Maintenance Dashboard</h1>", unsafe_allow_html=True)
 
 st.markdown("---")
 
 # ----------------------------
-# SESSION
+# SESSION STATE
 # ----------------------------
 for key in ["manual_sections", "index_sections", "custom_sections", "custom_rules"]:
     if key not in st.session_state:
         st.session_state[key] = []
 
 # ----------------------------
-# COST
+# COST SETTINGS
 # ----------------------------
 st.sidebar.header("💰 Cost Settings")
 
@@ -87,7 +93,7 @@ pattern_dict = {
 }
 
 # ----------------------------
-# FLOWCHART
+# FLOWCHART LOGIC
 # ----------------------------
 def final_recommendation(iri, traffic, pci):
 
@@ -130,21 +136,16 @@ fig = px.line()
 
 if mode == "Custom Rule-Based":
 
-    # 🔥 USER CONTROLLED CHART
     cols = list(df_base.columns)
 
-    col1, col2, col3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
 
-    x_axis = col1.selectbox("X Axis", cols, index=0, key="x_axis")
-    y_axis = col2.selectbox("Y Axis", cols, index=1, key="y_axis")
-    selected_lanes = col3.multiselect("Select Lanes", lanes, default=lanes, key="lane_sel")
+    x_axis = c1.selectbox("X Axis", cols, key="x_axis")
+    y_axis = c2.selectbox("Y Axis", cols, key="y_axis")
+    selected_lanes = c3.multiselect("Lanes", lanes, default=lanes, key="lane_sel")
 
     for lane in selected_lanes:
-        fig.add_scatter(
-            x=data[lane][x_axis],
-            y=data[lane][y_axis],
-            name=lane
-        )
+        fig.add_scatter(x=data[lane][x_axis], y=data[lane][y_axis], name=lane)
 
     fig.update_layout(xaxis_title=x_axis, yaxis_title=y_axis)
 
@@ -154,7 +155,7 @@ else:
     for lane in lanes:
         fig.add_scatter(x=data[lane]["Chainage"], y=data[lane][y], name=lane)
 
-    fig.update_layout(xaxis_title="Chainage", yaxis_title=y)
+    fig.update_layout(xaxis_title="Chainage (km)", yaxis_title=y)
 
 st.plotly_chart(fig, use_container_width=True)
 
@@ -165,11 +166,11 @@ if mode == "Custom Rule-Based":
 
     st.subheader("⚙️ Define Rules")
 
-    col1, col2, col3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
 
-    param = col1.selectbox("Parameter", list(df_base.columns), key="rule_param")
-    threshold = col2.number_input("Threshold", key="rule_th")
-    treatment = col3.selectbox("Treatment", list(pattern_dict.keys()), key="rule_treat")
+    param = c1.selectbox("Parameter", list(df_base.columns), key="rule_param")
+    threshold = c2.number_input("Threshold", key="rule_th")
+    treatment = c3.selectbox("Treatment", list(pattern_dict.keys()), key="rule_treat")
 
     if st.button("Add Rule"):
         st.session_state.custom_rules.append({
@@ -178,18 +179,18 @@ if mode == "Custom Rule-Based":
             "treatment": treatment
         })
 
-    st.write(st.session_state.custom_rules)
+    st.write("Active Rules:", st.session_state.custom_rules)
 
 # =========================================================
 # 🔷 ADD SECTION
 # =========================================================
 st.subheader("➕ Add Section")
 
-col1, col2, col3 = st.columns(3)
+c1, c2, c3 = st.columns(3)
 
-start, end = col1.slider("Chainage", 0.0, float(df_base["Chainage"].max()), (0.0, 0.5), key="sec_slider")
-treatment = col2.selectbox("Treatment", list(pattern_dict.keys()), key="sec_treat")
-lanes_sel = col3.multiselect("Lanes", lanes, default=[lanes[0]], key="sec_lane")
+start, end = c1.slider("Chainage", 0.0, float(df_base["Chainage"].max()), (0.0, 0.5), key="sec_slider")
+treatment = c2.selectbox("Treatment", list(pattern_dict.keys()), key="sec_treat")
+lanes_sel = c3.multiselect("Lanes", lanes, default=[lanes[0]], key="sec_lane")
 
 if st.button("Add Section Button"):
     sec = {"start": start, "end": end, "treatment": treatment, "lanes": lanes_sel}
@@ -274,16 +275,67 @@ for lane in lanes:
             if sec["start"] <= chain <= sec["end"] and lane in sec["lanes"]:
                 hatch = pattern_dict.get(sec["treatment"])
 
-        ax.barh(positions[lane], 0.01, left=chain, color=color, hatch=hatch)
-
-# Legend
-legend = [mpatches.Patch(color="#2ecc71", label="Good"),
-          mpatches.Patch(color="#e74c3c", label="Bad")]
-
-ax.legend(handles=legend)
+        ax.barh(positions[lane], 0.01, left=chain, color=color, hatch=hatch, edgecolor="black")
 
 ax.set_yticks(list(positions.values()))
 ax.set_yticklabels(list(positions.keys()))
-ax.set_xlabel("Chainage")
+ax.set_xlabel("Chainage (km)")
 
 st.pyplot(fig)
+
+# =========================================================
+# 🔷 LEGENDS
+# =========================================================
+st.subheader("🎨 Legend")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    if mode == "Manual Planning":
+        st.markdown("🟢 Good (IRI ≤ 3.3)\n\n🔴 Bad (IRI > 3.3)")
+    else:
+        st.markdown("PCI Gradient:\n\n🔴 0 → 🟢 100")
+
+with col2:
+    for k, v in pattern_dict.items():
+        st.markdown(f"{v} → {k}")
+
+# =========================================================
+# 🔷 COST TABLE + EXPORT
+# =========================================================
+st.subheader("📋 Maintenance Plan & Cost")
+
+rows = []
+total_cost = 0
+
+for sec in sections:
+    length = sec["end"] - sec["start"]
+    lane_count = len(sec["lanes"])
+    rate = cost_dict.get(sec["treatment"], 0)
+
+    cost = length * rate * lane_count
+    total_cost += cost
+
+    rows.append({
+        "Start": sec["start"],
+        "End": sec["end"],
+        "Length (km)": round(length,3),
+        "Treatment": sec["treatment"],
+        "Lanes": ", ".join(sec["lanes"]),
+        "Cost (₹)": int(cost)
+    })
+
+if rows:
+    df_plan = pd.DataFrame(rows)
+    st.dataframe(df_plan)
+
+    st.success(f"💰 Total Cost: ₹ {int(total_cost):,}")
+
+    buffer = io.BytesIO()
+    df_plan.to_excel(buffer, index=False, engine='openpyxl')
+
+    st.download_button(
+        "⬇️ Download Excel",
+        buffer.getvalue(),
+        "Maintenance_Plan.xlsx"
+    )
